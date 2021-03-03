@@ -4,7 +4,7 @@
 
 In this homework, you will implement and train a variety of different autoregressive models, such as MADE and PixelCNN. The homework consists of two components:
 
-* `HW1_Autoregressive_Models.ipynb` : Contains all of the coding questions, and will automatically generate and display results for you after completing each question. Open it on Colab by clicking on the file, and then "Open in Colab" at the top. On Colab, download the result images from the left dashboard (folder icon). You will use these images in your report PDF.
+* `HW1_Autoregressive_Models.ipynb` : Contains all of the coding questions, and will automatically generate and display results for you after completing each question. Open it on Colab by clicking on the file, and then "Open in Colab" at the top. Make sure that you save a copy of the notebook on your own drive to keep your progress. On Colab, download the result images from the left dashboard (folder icon). You will use these images in your report PDF.
 
 * `hw1_latex` :  Contains LaTeX files and figures needed to generate your PDF submission. Copy the images saved from the notebook into the `figures/` folder and fill out the empty test losses. Run `hw1_latex_template.tex` to generate your PDF. 
 
