@@ -7,6 +7,7 @@ import numpy as np
 from enum import Enum
 import models
 
+
 # Hint: You may want to implement training and the evaluation procedures as functions
 # which take a model and the dataloaders as an input and return the losses.
 
@@ -17,16 +18,26 @@ class DataLoaderType(Enum):
     TEST = 3
 
 
+data.DataLoader
+
+
+# TODO: UPDATE
+#  - a (# of training iterations,) numpy array of train_losses evaluated every minibatch
+#   - a (# of epochs + 1,) numpy array of test_losses evaluated once at initialization and after each epoch
 def train_model(model,
                 # {DataLoaderType: DL}
                 dataloader_dict,
                 epochs,
-                optimizer):
+                optimizer,
+                batch_size):
+    epoch_losses = []
+    dataloader_types = dataloader_dict.keys()
     for epoch in range(epochs):  # loop over the dataset multiple times
-        running_loss = 0.0
-        dataloader_types = dataloader_dict.keys()
+        losses = {}
         for dataloader_type in dataloader_types:
+            losses[dataloader_type] = 0
             dataloader = dataloader_dict[dataloader_type]
+            num_batches = len(dataloader)
             for i, data in enumerate(dataloader, 0):
                 inputs = data
                 if dataloader_type == DataLoaderType.TRAIN:
@@ -41,8 +52,10 @@ def train_model(model,
                 elif dataloader_type == DataLoaderType.TEST:
                     model.eval()
                     loss = model.loss(inputs)
-                running_loss += loss.item()
-                if i % 50 == 0:  # print every 2000 mini-batches
+                losses[dataloader_type] += loss.item() / batch_size
+                if i % 1 == 0:
                     print('[%d, %5d] loss: %.3f' %
-                          (epoch + 1, i + 1, running_loss / 2000))
-                    running_loss = 0.0
+                          (epoch + 1, i + 1, losses[dataloader_type] / 2000))
+            losses[dataloader_type] /= num_batches
+        epoch_losses.append(losses)
+    return model, epoch_losses

@@ -77,3 +77,79 @@ class Histogram(nn.Module):
         distribution = distribution.cpu().detach().numpy()
         distribution = np.squeeze(distribution)
         return distribution
+
+
+# https://github.com/Rayhane-mamah/Tacotron-2/issues/155
+# https://arxiv.org/pdf/1701.05517.pdf
+
+class MixtureOfLogistics(nn.Module):
+    def __init__(self, d, n_mix=4):
+        super().__init__()
+        self.d = d
+        self.n_mix = 4
+        # pi, m, s
+        self.W = torch.zeros(n_mix, 3)
+        self.W[:, 2] = torch.tensor(1 / n_mix)
+        self.W[:, 0] = torch.tensor(1 / n_mix)
+        self.W = nn.Parameter(self.W)
+        self.W.requires_grad = True
+
+    def forward(self, x):
+        value = 0
+        # pis = self.W[:, 1]
+        # softmaxed_pis = nn.Softmax(pis)
+        for i in range(self.n_mix):
+            s_pi = self.W[i, 0]  # softmaxed_pis[i]
+            m = self.W[i, 1]
+            s = self.W[i, 2]
+            active_x = torch.div(torch.subtract(x, m), s)
+            sigm = nn.Sigmoid()
+            sigmoid_result = sigm(active_x)
+            value += s_pi * sigmoid_result
+        # TODO: add clamping here
+        return value
+
+    # For the edge case of when $x = 0$,
+    # we replace $x-0.5$ by $-\infty$,
+    # and for $x = d-1$,
+    # we replace $x+0.5$ by $\infty$.
+
+    # https://github.com/Rayhane-mamah/Tacotron-2/blob/d13dbba16f0a434843916b5a8647a42fe34544f5/wavenet_vocoder/models/mixture.py#L44-L49
+
+    def loss(self, x):
+        #torch.autograd.set_detect_anomaly(True)
+        batch_size = x.shape[0]
+        bins = torch.tensor(list(range(0, self.d)))
+        minus_inf = float('-inf')
+        positive_inf = float('inf')
+        term_a = bins - 0.5
+        term_a[term_a == -0.5] = torch.tensor(minus_inf)
+        term_b = bins + 0.5
+        term_b[term_b >= (self.d - 0.5)] = torch.tensor(positive_inf)
+        values = []
+        # pis = self.W[:, 1]
+        # softmaxed_pis = nn.Softmax(pis)
+        for i in range(self.n_mix):
+            s_pi = self.W[i, 0]  # softmaxed_pis[i]
+            m = self.W[i, 1]
+            s = self.W[i, 2]
+            term_a_pre_res = torch.div(term_a - m, s)
+            sigm_a = nn.Sigmoid()
+            term_a_res = sigm_a(term_a_pre_res)
+            term_b_pre_res = torch.div(term_b - m, s)
+            sigm_b = nn.Sigmoid()
+            term_b_res = sigm_b(term_b_pre_res)
+            internal_res = term_a_res - term_b_res
+            value = s_pi * internal_res
+            values.append(value)
+        stacked_values = torch.stack(values)
+        summed_values = stacked_values.sum(dim=0)
+        neg_probs = F.log_softmax(summed_values)
+        neg_probs = torch.reshape(neg_probs, (1, self.d))
+        neg_probs_for_batch = torch.repeat_interleave(neg_probs, repeats=batch_size, dim=0)
+        nll_loss = nn.NLLLoss()
+        total_loss = nll_loss(neg_probs_for_batch, x)
+        return total_loss
+
+    def get_distribution(self):
+        """ YOUR CODE HERE """
