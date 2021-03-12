@@ -31,10 +31,13 @@ def train_model(model,
                 optimizer,
                 batch_size):
     epoch_losses = []
+    train_iteration_losses = []
     dataloader_types = dataloader_dict.keys()
-    for epoch in range(epochs):  # loop over the dataset multiple times
+    for epoch in range(-1, epochs):  # loop over the dataset multiple times
         losses = {}
         for dataloader_type in dataloader_types:
+            if epoch == -1 and dataloader_type == DataLoaderType.TRAIN:
+                continue
             losses[dataloader_type] = 0
             dataloader = dataloader_dict[dataloader_type]
             num_batches = len(dataloader)
@@ -46,6 +49,7 @@ def train_model(model,
                     loss = model.loss(inputs)
                     loss.backward()
                     optimizer.step()
+                    train_iteration_losses.append(loss.item() / batch_size)
                 elif dataloader_type == DataLoaderType.VALIDATION:
                     model.eval()
                     loss = model.loss(inputs)
@@ -58,4 +62,4 @@ def train_model(model,
                           (epoch + 1, i + 1, losses[dataloader_type] / 2000))
             losses[dataloader_type] /= num_batches
         epoch_losses.append(losses)
-    return model, epoch_losses
+    return model, epoch_losses, train_iteration_losses

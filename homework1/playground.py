@@ -22,7 +22,7 @@ def proto_q(train_data,
     test_dataloader = data.DataLoader(test_data,
                                       batch_size=batch_size,
                                       shuffle=True)
-    model, losses = trainer.train_model(model, {
+    model, losses, train_iteration_losses = trainer.train_model(model, {
         trainer.DataLoaderType.TRAIN: train_dataloader,
         trainer.DataLoaderType.TEST: test_dataloader
     },
@@ -31,7 +31,8 @@ def proto_q(train_data,
                                         batch_size=batch_size
                                         )
 
-    train_loss = map(lambda x: x[trainer.DataLoaderType.TRAIN], losses)
+    #train_loss = map(lambda x: x[trainer.DataLoaderType.TRAIN], losses)
+    train_loss = train_iteration_losses
     test_loss = map(lambda x: x[trainer.DataLoaderType.TEST], losses)
     return list(train_loss), list(test_loss), model.get_distribution()
 
@@ -46,7 +47,7 @@ def q1_a(train_data, test_data, d, dset_id):
     test_dataloader = data.DataLoader(test_data,
                                       batch_size=batch_size,
                                       shuffle=True)
-    model, losses = trainer.train_model(model, {
+    model, losses, train_iteration_losses = trainer.train_model(model, {
         trainer.DataLoaderType.TRAIN: train_dataloader,
         trainer.DataLoaderType.TEST: test_dataloader
     },
@@ -55,7 +56,8 @@ def q1_a(train_data, test_data, d, dset_id):
                                         batch_size=batch_size
                                         )
 
-    train_loss = map(lambda x: x[trainer.DataLoaderType.TRAIN], losses)
+    #train_loss = map(lambda x: x[trainer.DataLoaderType.TRAIN], losses)
+    train_loss = train_iteration_losses
     test_loss = map(lambda x: x[trainer.DataLoaderType.TEST], losses)
     return list(train_loss), list(test_loss), model.get_distribution()
 
@@ -70,8 +72,8 @@ if __name__ == '__main__':
     # dset_type = 1
     # train_losses, test_losses, distribution = q1_a(train_data, test_data, d, dset_type)
 
-    # q1_save_results(1, 'a', q1_a)
-    # q1_save_results(2, 'a', q1_a)
+    #q1_save_results(1, 'a', q1_a)
+    q1_save_results(2, 'a', q1_a)
 
-    q1_save_results(1, 'b', q1_b)
-    # q1_save_results(2, 'b', q1_b)
+    #q1_save_results(1, 'b', q1_b)
+    #q1_save_results(2, 'b', q1_b)
