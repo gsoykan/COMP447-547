@@ -62,7 +62,7 @@ def q1_a(train_data, test_data, d, dset_id):
 
 def q1_b(train_data, test_data, d, dset_id):
     model = models.MixtureOfLogistics(d)
-    return proto_q(train_data, test_data, model, lr=0.00001)
+    return proto_q(train_data, test_data, model, lr=0.001)
 
 if __name__ == '__main__':
     # train_data, test_data = q1_sample_data_1()

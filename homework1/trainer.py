@@ -53,7 +53,7 @@ def train_model(model,
                     model.eval()
                     loss = model.loss(inputs)
                 losses[dataloader_type] += loss.item() / batch_size
-                if i % 1 == 0:
+                if i % 50 == 0:
                     print('[%d, %5d] loss: %.3f' %
                           (epoch + 1, i + 1, losses[dataloader_type] / 2000))
             losses[dataloader_type] /= num_batches

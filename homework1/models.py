@@ -88,26 +88,41 @@ class MixtureOfLogistics(nn.Module):
         self.d = d
         self.n_mix = 4
         # pi, m, s
-        self.W = torch.zeros(n_mix, 3)
-        self.W[:, 2] = torch.tensor(1 / n_mix)
-        self.W[:, 0] = torch.tensor(1 / n_mix)
+        # TODO: find better way to initialize
+        self.W = torch.randn(n_mix, 3)
+        #self.W[:, 2] = torch.tensor(1 / n_mix)
+        self.W[:, 1] = self.W[:, 1] * torch.tensor(int(d / 2))
+        #self.W[:, 0] = torch.tensor(1 / n_mix)
         self.W = nn.Parameter(self.W)
         self.W.requires_grad = True
 
+    # torch.sigmoid(), torch.clamp(), F.log_softmax()
     def forward(self, x):
-        value = 0
-        # pis = self.W[:, 1]
-        # softmaxed_pis = nn.Softmax(pis)
-        for i in range(self.n_mix):
-            s_pi = self.W[i, 0]  # softmaxed_pis[i]
-            m = self.W[i, 1]
-            s = self.W[i, 2]
-            active_x = torch.div(torch.subtract(x, m), s)
-            sigm = nn.Sigmoid()
-            sigmoid_result = sigm(active_x)
-            value += s_pi * sigmoid_result
-        # TODO: add clamping here
-        return value
+        n_mix = self.n_mix
+
+        # create x for each mixture
+        x = torch.repeat_interleave(torch.reshape(x, (-1, 1)), repeats=n_mix, dim=1)
+
+        pi = self.W[:, 0]
+        softmaxed_pi = torch.softmax(pi, dim=0)
+        mean = self.W[:, 1]
+        scale = self.W[:, 2]
+
+        offset = 0.5
+        centered_mean = x - mean
+
+        cdfminus_arg = (centered_mean - offset) * torch.exp(scale)
+        cdfplus_arg = (centered_mean + offset) * torch.exp(scale)
+
+        cdfminus_safe = torch.sigmoid(cdfminus_arg)
+        cdfplus_safe = torch.sigmoid(cdfplus_arg)
+
+        raw_px = torch.where(x <= 0, cdfplus_safe,
+                             torch.where(x >= self.d - 1, 1 - cdfminus_safe,
+                                         cdfplus_safe - cdfminus_safe ))
+        px = torch.sum(softmaxed_pi * raw_px, dim=-1)
+        return px
+
 
     # For the edge case of when $x = 0$,
     # we replace $x-0.5$ by $-\infty$,
@@ -115,41 +130,45 @@ class MixtureOfLogistics(nn.Module):
     # we replace $x+0.5$ by $\infty$.
 
     # https://github.com/Rayhane-mamah/Tacotron-2/blob/d13dbba16f0a434843916b5a8647a42fe34544f5/wavenet_vocoder/models/mixture.py#L44-L49
-
+    # https://bjlkeng.github.io/posts/pixelcnn/
     def loss(self, x):
-        #torch.autograd.set_detect_anomaly(True)
-        batch_size = x.shape[0]
-        bins = torch.tensor(list(range(0, self.d)))
-        minus_inf = float('-inf')
-        positive_inf = float('inf')
-        term_a = bins - 0.5
-        term_a[term_a == -0.5] = torch.tensor(minus_inf)
-        term_b = bins + 0.5
-        term_b[term_b >= (self.d - 0.5)] = torch.tensor(positive_inf)
-        values = []
-        # pis = self.W[:, 1]
-        # softmaxed_pis = nn.Softmax(pis)
-        for i in range(self.n_mix):
-            s_pi = self.W[i, 0]  # softmaxed_pis[i]
-            m = self.W[i, 1]
-            s = self.W[i, 2]
-            term_a_pre_res = torch.div(term_a - m, s)
-            sigm_a = nn.Sigmoid()
-            term_a_res = sigm_a(term_a_pre_res)
-            term_b_pre_res = torch.div(term_b - m, s)
-            sigm_b = nn.Sigmoid()
-            term_b_res = sigm_b(term_b_pre_res)
-            internal_res = term_a_res - term_b_res
-            value = s_pi * internal_res
-            values.append(value)
-        stacked_values = torch.stack(values)
-        summed_values = stacked_values.sum(dim=0)
-        neg_probs = F.log_softmax(summed_values)
-        neg_probs = torch.reshape(neg_probs, (1, self.d))
-        neg_probs_for_batch = torch.repeat_interleave(neg_probs, repeats=batch_size, dim=0)
-        nll_loss = nn.NLLLoss()
-        total_loss = nll_loss(neg_probs_for_batch, x)
-        return total_loss
+        torch.autograd.set_detect_anomaly(True)
+        n_mix = self.n_mix
+
+        # create x for each mixture
+        x = torch.repeat_interleave(torch.reshape(x, (-1, 1)), repeats=n_mix, dim=1)
+
+        pi = self.W[:, 0]
+        mean = self.W[:, 1]
+        scale = self.W[:, 2]
+
+        offset = 0.5
+        centered_mean = x - mean
+
+        cdfminus_arg = (centered_mean - offset) * torch.exp(scale)
+        cdfplus_arg = (centered_mean + offset) * torch.exp(scale)
+
+        cdfminus_safe = torch.sigmoid(cdfminus_arg)
+        cdfplus_safe = torch.sigmoid(cdfplus_arg)
+
+        # case 1
+        softplus = nn.Softplus()
+        log_cdfplus = cdfplus_arg - softplus(cdfplus_arg)
+
+        # case 2
+        softplus2 = nn.Softplus()
+        log_1minus_cdf = -1 * softplus2(cdfminus_arg)
+
+        log_ll = torch.where(x <= 0, log_cdfplus,
+                             torch.where(x >= self.d - 1, log_1minus_cdf,
+                                         torch.log(torch.maximum(cdfplus_safe - cdfminus_safe, torch.tensor(1e-10)))))
+        pre_result = F.log_softmax(pi) + log_ll
+        sum_ll = torch.logsumexp(pre_result, dim=-1)
+        avg_loss = -1 * torch.sum(sum_ll)
+        return avg_loss
 
     def get_distribution(self):
-        """ YOUR CODE HERE """
+        x = torch.Tensor(list(range(0, self.d)))
+        distribution = self.forward(x)
+        distribution = distribution.cpu().detach().numpy()
+        return distribution
