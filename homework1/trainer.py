@@ -6,7 +6,7 @@ import torch.nn.functional as F
 import numpy as np
 from enum import Enum
 import models
-
+import config
 
 # Hint: You may want to implement training and the evaluation procedures as functions
 # which take a model and the dataloaders as an input and return the losses.
@@ -21,9 +21,6 @@ class DataLoaderType(Enum):
 data.DataLoader
 
 
-# TODO: UPDATE
-#  - a (# of training iterations,) numpy array of train_losses evaluated every minibatch
-#   - a (# of epochs + 1,) numpy array of test_losses evaluated once at initialization and after each epoch
 def train_model(model,
                 # {DataLoaderType: DL}
                 dataloader_dict,
@@ -42,24 +39,26 @@ def train_model(model,
             dataloader = dataloader_dict[dataloader_type]
             num_batches = len(dataloader)
             for i, data in enumerate(dataloader, 0):
-                inputs = data
+                inputs = data.to(config.device)
                 if dataloader_type == DataLoaderType.TRAIN:
                     model.train()
                     optimizer.zero_grad()
                     loss = model.loss(inputs)
                     loss.backward()
                     optimizer.step()
-                    train_iteration_losses.append(loss.item() / batch_size)
+                    train_iteration_losses.append(loss.item())
                 elif dataloader_type == DataLoaderType.VALIDATION:
                     model.eval()
                     loss = model.loss(inputs)
                 elif dataloader_type == DataLoaderType.TEST:
                     model.eval()
                     loss = model.loss(inputs)
-                losses[dataloader_type] += loss.item() / batch_size
+                losses[dataloader_type] += loss.item()
+
                 if i % 50 == 0:
-                    print('[%d, %5d] loss: %.3f' %
-                          (epoch + 1, i + 1, losses[dataloader_type] / 2000))
+                    print(str(dataloader_type) + " " + '[%d, %5d] loss: %.5f' %
+                          (epoch + 1, i + 1, loss))
+
             losses[dataloader_type] /= num_batches
         epoch_losses.append(losses)
     return model, epoch_losses, train_iteration_losses
