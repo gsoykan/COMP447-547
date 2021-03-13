@@ -8,6 +8,7 @@ import torch.nn.functional as F
 import numpy as np
 from torch import Tensor
 import config
+from scipy.stats import bernoulli
 
 
 # sources
@@ -189,7 +190,7 @@ def to_one_hot(labels, d, to_cuda: bool = False):
     else:
         one_hot = torch.FloatTensor(flattened_labels.shape[0], d)
     one_hot.zero_()
-    one_hot.scatter_(1, flattened_labels.unsqueeze(1), 1)
+    one_hot.scatter_(1, flattened_labels.unsqueeze(1).long(), 1)
     result = one_hot.view(labels.shape[0], -1)
     return result
 
@@ -202,8 +203,8 @@ class MaskedLinear(nn.Linear):
                  activation,
                  bias: bool = True,
                  is_output_layer: bool = False,
-                 output_m = None,
-                 input_m = None):
+                 output_m=None,
+                 input_m=None):
         super().__init__(in_features=in_features, out_features=out_features, bias=bias)
         self.is_output_layer = is_output_layer
         # self.weight = Parameter(torch.Tensor(out_features, in_features))
@@ -230,13 +231,10 @@ class MaskedLinear(nn.Linear):
                     mask[hi, ii] = 1 if h_m >= i_m else 0
         self.mask = mask
 
-
     def masked_forward(self,
                        input: Tensor,
                        input_m
                        ) -> Tensor:
-        is_output_layer = self.is_output_layer
-
         masked_weights = torch.mul(self.weight, self.mask)
         preactivated_result = F.linear(input, masked_weights, self.bias)
         if self.is_output_layer:
@@ -251,9 +249,13 @@ class MADE(nn.Module):
                  d,
                  input_dimension_coeff,
                  h,
-                 activation_hidden):
+                 activation_hidden,
+                 H=None,
+                 W=None):
         super().__init__()
-        self.input_shape = (input_dimension_coeff, )
+        self.H = H
+        self.W = W
+        self.input_shape = (input_dimension_coeff,)
         self.d = d
         self.input_dimension_coeff = input_dimension_coeff
         self.input_dim = d * input_dimension_coeff
@@ -315,8 +317,8 @@ class MADE(nn.Module):
     def loss(self, x):
         forward_result = self.forward(x)
         loss_fn = nn.CrossEntropyLoss()
-        total_loss = loss_fn(forward_result,
-                             x)
+        reshaped_x = torch.reshape(x, (x.shape[0], -1)).long()
+        total_loss = loss_fn(forward_result, reshaped_x)
         return total_loss
 
     def get_distribution(self):
@@ -327,3 +329,24 @@ class MADE(nn.Module):
         distribution = torch.gather(log_probs, 1, x.unsqueeze(1)).squeeze(1)
         distribution = distribution.sum(dim=1)
         return distribution.exp().view(self.d, self.d).detach().cpu().numpy()
+
+    def generate_sample(self):
+        initial_batch = torch.zeros((100, self.H, self.W, 1)).to(config.device)
+        for i in range(self.input_dimension_coeff):
+            active_index = int((np.where(self.input_m == i + 1)[0] / 2)[0])
+            forward_result = self.forward(initial_batch)
+            raw_p = forward_result[:, :, active_index]
+            probs = torch.softmax(raw_p, dim=1)
+            probs_for_1 = probs[:, 1]
+            new_values = []
+            for p_1 in probs_for_1:
+                p_1_numpy = p_1.detach().cpu().numpy()
+                new_value = bernoulli.rvs(p_1_numpy)
+                new_values.append(new_value)
+            new_values_tensor = Tensor(new_values)
+            new_values_tensor = torch.reshape(new_values_tensor, (-1, 1))
+            second_index = active_index % self.W
+            first_index = active_index // self.W
+            initial_batch[:, first_index, second_index] = new_values_tensor
+
+        return initial_batch.detach().cpu().numpy()

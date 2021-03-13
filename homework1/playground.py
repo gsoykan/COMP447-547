@@ -116,15 +116,18 @@ def q2_b(train_data, test_data, image_shape, dset_id):
     _, H, W, _ = train_data.shape
 
     model = models.MADE(d=2,
-                        h=64,
+                        h=1024,
                         activation_hidden=nn.ELU(),
-                        input_dimension_coeff=H*W)
+                        input_dimension_coeff=H*W,
+                        H=H,
+                        W=W)
     model.to(config.device)
     return proto_q(train_data,
                    test_data,
                    model,
                    lr=0.1,
-                   epochs=5)
+                   epochs=20,
+                   final_func=model.generate_sample)
 
 if __name__ == '__main__':
     print("program start")
@@ -145,5 +148,8 @@ if __name__ == '__main__':
     # Final Test Loss: 5.2991
     #q2_save_results(2, 'a', q2_a)
 
+    # Final Test Loss: 0.0754
     #q2_save_results(1, 'b', q2_b)
-    #q2_save_results(2, 'b', q2_b)
+
+    # Final Test Loss: 0.1190
+    q2_save_results(2, 'b', q2_b)
